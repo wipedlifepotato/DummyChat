@@ -2,17 +2,17 @@
 const express = require('express');
 const cors = require('cors');
 const samRoutes = require('./routes/sam');
-const cryptoRoutes = require('./routes/crypto');
-
+require('dotenv').config()
+const path = require('path')
 const app = express();
-const PORT = 3001;
+const PORT = Number(process.env.PORT||3001);
 
 app.use(cors());
 app.use(express.json());
 
 app.use('/api/sam', samRoutes);
-app.use('/api/crypto', cryptoRoutes);
-
+app.use('/', express.static(path.join(__dirname, 'public')))
+app.use('/static', express.static(path.join(__dirname, 'public')));
 app.listen(PORT, () => {
-  console.log(`API сервер запущен на http://localhost:${PORT}`);
+  console.log(`API server runs http://localhost:${PORT}`);
 });

@@ -6,9 +6,16 @@ const { v4: uuidv4 } = require('uuid');
 
 const samSockets = new Map();
 const buffers = new Map();
-const SamHost = '127.0.0.1';
-const SamPort = 7656;
+let SamHost = '127.0.0.1';
+let SamPort = 7656;
 
+router.post('/setSAM', async (req,res)=> {
+  console.log(`set SAM`)
+  const {host, port} = req.body;
+  SamPort = Number(port)
+  SamHost = host
+  res.json({'status': 'ok'})
+})
 router.get('/clear', async (req, res) => {
   for (const [_, socket] of samSockets.entries()) {
     if (socket) {

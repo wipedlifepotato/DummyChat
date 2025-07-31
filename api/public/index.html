@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>DummyChat UI</title>
+  <script src="/static/js/vue.global.js"></script>
+  <style>
+    #settings {
+      display: flex;
+      flex-direction: column;
+    }
+    #settings input, #settings button {
+      max-width: 180px;
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <h1>{{ title }}</h1>
+    <label for="socketId">ID Socket: </label> <input id="socketId" />
+    <button @click="fetchBuffers">Получить буфер</button>
+    <pre>{{ buffer }}</pre>
+
+    <hr/>
+    <section id="settings">
+      <h2> Настройки </h2>
+      <label for="samHOST">Хост SAM: </label><input id="samHOST" placeholder="127.0.0.1" />
+      <label for="samPORT">Хост SAM: </label><input id="samPORT" placeholder="7656" type="number" />
+      <label for="pubKey">Публичный ключ: </label><input id="pubKey" :value="pubkey" disabled />
+      <button @click="setSAM">Установить</button>
+      <button @click="clearSockets">Очистить сокеты</button>
+      <button @click="genKeys">Сгенерировать ключи</button>
+    </section>
+    <hr/>
+    <!-- TODO: -->
+    <section id="chatBox">
+      <h2>Чат</h2>
+      <label for=""></label>
+      <div id="chatHistory" style="border:1px solid #ccc; padding:10px; height:200px; overflow-y:scroll;">
+        <div v-for="msg in messages" :key="msg.id">
+          <strong>{{ msg.from }}:</strong> {{ msg.text }}
+        </div>
+      </div>
+      <textarea v-model="message" placeholder="Введите сообщение..." rows="3" style="width:100%;"></textarea>
+      <button @click="sendMessage">Отправить</button>
+    </section>
+  </div>
+
+  <script>
+    
+
+    const { createApp } = Vue
+
+    createApp({
+      data() {
+        return {
+          title: 'DummyChat UI',
+          buffer: '',
+          pubkey: localStorage.getItem('pubkey'),
+          message: '',
+          messages: [],
+          nickname: 'You'  // можно будет менять
+        }
+      },
+      methods: {
+        async genKeys() {
+          const res = await fetch('/api/sam/generateDestination/7')
+          if(res.ok)
+          {
+            const pubKeyInput = document.getElementById('pubKey')
+            const data = await res.json();
+            console.log(data)
+            pubKeyInput.value = data.pubkey
+            localStorage.setItem('privkey', data.privkey);
+            localStorage.setItem('pubkey', data.pubkey);
+          } else alert("Err")
+        },
+        async clearSockets() {
+          const res = await fetch('/api/sam/clear')
+          if (res.ok) console.log(`cleared`)
+          else alert("Err")
+        },
+        async setSAM() {
+            const SAMHost = document.getElementById('samHOST').value
+            const SAMPORT = document.getElementById('samPORT').value
+            const res = await fetch('/api/sam/setSAM', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ host: SAMHost, port: SAMPORT })
+            });
+            if (!res.ok) return alert("Err")
+
+            const json = await res.json();
+            console.log('setSAM result:', json);            
+        },
+        async fetchBuffers() {
+          const res = await fetch('/api/sam/getBuffer/testbuf');
+          const json = await res.json();
+          this.buffer = JSON.stringify(json, null, 2);
+        }
+      }
+    }).mount('#app')
+  </script>
+</body>
+</html>
