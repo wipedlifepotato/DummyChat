@@ -122,6 +122,7 @@ router.post('/setBuffer', async (req, res) => {
 
   if (!buffers.has(bufName)) {
     buffers.set(bufName, '');
+    return res.status(500).json({error: "already exists, clear buf"})
   }
 
   socket.on('data', (data) => {
