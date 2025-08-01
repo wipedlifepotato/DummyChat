@@ -15,4 +15,5 @@
 
 ---
 
-![Screenshot](https://github.com/user-attachments/assets/6db7fb29-96be-4398-8ffa-c61db020c137)
+<img width="914" height="434" alt="изображение" src="https://github.com/user-attachments/assets/7e996912-e6db-40e6-97c6-ed362ced0778" />
+
