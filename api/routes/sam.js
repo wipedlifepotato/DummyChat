@@ -410,11 +410,16 @@ router.post('/send', async (req, res) => {
  */
 router.get('/getBuffer/:bufName', async (req, res) => {
   const bufName = req.params.bufName;
+
   if (!bufName) {
     return res.status(400).json({ error: 'bufName parameter required' });
   }
 
-  const data = buffers.get(bufName) || '';
+  if (!buffers.has(bufName)) {
+    return res.status(404).json({ error: `Buffer "${bufName}" not found` });
+  }
+
+  const data = buffers.get(bufName);
   res.json({ status: 'ok', buffer: data });
 });
 /**
@@ -486,9 +491,11 @@ router.get('/getBuffer/:bufName', async (req, res) => {
 
 router.post('/setBuffer', async (req, res) => {
   const { sockId, bufName } = req.body;
+
   if (!sockId || !bufName) {
     return res.status(400).json({ error: 'sockId and bufName are required' });
   }
+
   const socket = samSockets.get(sockId);
   if (!socket) {
     return res.status(404).json({ error: 'Socket not found' });
@@ -496,13 +503,18 @@ router.post('/setBuffer', async (req, res) => {
 
   if (!buffers.has(bufName)) {
     buffers.set(bufName, '');
-    return res.status(200).json({error: "already exists, clear buf"})
   }
 
-  socket.on('data', (data) => {
-    const current = buffers.get(bufName) || '';
-    buffers.set(bufName, current + data.toString());
-  });
+  if (!socket._bufferAttached) {
+    socket._bufferAttached = true;
+    console.log(`set socket`)
+    socket.on('data', (data) => {
+      console.log(`data on socket: ${data}`)
+      const current = buffers.get(bufName) || '';
+      buffers.set(bufName, current + data.toString());
+      console.log(`bufName: ${bufName}, bufferData: ${buffers.get(bufName)}`)
+    });
+  }
 
   res.json({ status: 'ok', message: `Buffer "${bufName}" is set on socket "${sockId}"` });
 });

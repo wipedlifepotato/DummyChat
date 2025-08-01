@@ -48,6 +48,7 @@
         <!-- Friends -->
         <div class="col-md-3 sidebar">
           <h5>Друзья</h5>
+          <button @click="mainInputStreamSet">Главный стрим</button>
           <div v-for="friend in friends" class="friend" @click="selectFriend(friend.name, friend.pubkey)">
             {{ friend.name }} <button @click="delFriend(friend.name)">Del</button>
           </div>
@@ -146,15 +147,66 @@
           outputSockets: {},
           nickname: 'You',
           msgParserInterval: false,
-          selectedFriend: ''
+          selectedFriend: '',
+          mainInputSocket: {}
         }
       },
+      async mounted() {
+        this.initSessions().then( () => {
+          console.log(`session inited`)
+        })
+      },
       methods: {
+        async mainInputStreamSet() {
+          if (this.msgParserInterval) clearInterval(this.msgParserInterval);
+          this.lastBuffer = '';
+
+            this.msgParserInterval = setInterval(async () => {
+              const buffer = await this.fetchBuffers('mainInputSocket');
+              
+              if (!buffer || buffer === this.lastBuffer) return; 
+
+              const msgs = buffer.slice(this.lastBuffer.length).split("\r\n");
+              this.lastBuffer = buffer;
+
+              for (const msg of msgs) {
+                if (!msg.trim()) continue;
+                const msgEscaped = htmlEscape(msg);
+                this.messages.push({ from: friendName, text: msgEscaped });
+              }
+              this.buffer = this.messages.map(m => `${m.from}: ${m.text}`).join("\r\n");
+            }, 2500);        },
+        async initSessions() {
+          if (this.privkey) {
+            const data = await this.createSession('mainInputSocket', this.privkey);
+            this.sessions['mainInputSocket'] = data;
+            this.selectedFriend = 'mainInputSocket'
+            const acceptSocket = await this.sessionAccept('mainInputSocket');
+            this.mainInputSocket = acceptSocket;
+            await this.setBuffer(this.mainInputSocket, 'mainInputSocket');
+            
+          }
+
+          for (const friend of this.friends) {
+            if (!this.sessions[friend.name]) {
+              console.log(`init session`);
+              const data = await this.createSession(friend.name, this.privkey);
+              if (!data) {
+                console.log(`session exists already`);
+              } else {
+                this.sessions[friend.name] = data;
+              }
+            }
+            const acceptSocket = await this.sessionAccept(friend.name);
+            this.acceptSockets[friend.name] = acceptSocket; // БЫЛА ОШИБКА: friendName → friend.name
+          }
+        },
         async selectFriend(friendName, pubkey) {
           if (!this.sessions[friendName])
           {
             const res = await this.createSession(friendName, this.privkey)
-            this.sessions[friendName] = res
+            if(res) this.sessions[friendName] = res
+            else console.log(`session exists already`)
             //if(!res) alert("can't create session")
           }
           console.log(`friend name: ${friendName}`)
@@ -261,12 +313,13 @@
                 return alert("err with session create")
             }
             const data = await res.json()
-            acceptSockets[nick] = data.id
+            this.acceptSockets[nick] = data.id
             return data.id
         },
         async createSession(nick, privkey=false) {
             if (this.sessions[nick]){
-              return alert("session exists")
+              //return alert("session exists")
+              return;
             }
             const key = privkey ? privkey : localStorage.getItem('privkey')
             if (!key) {
