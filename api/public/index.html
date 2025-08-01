@@ -119,7 +119,14 @@
   </div>
   <script src="/static/js/bootstrap.js"></script>
   <script>
-    
+    function htmlEscape(str) {
+      return str
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
 
     const { createApp } = Vue
 
@@ -136,12 +143,39 @@
           friends: JSON.parse(localStorage.getItem('friends')) || [],
           acceptSockets: {},
           outputSockets: {},
-          nickname: 'You'
+          nickname: 'You',
+          msgParserInterval: false,
+          selectedFriend: ''
         }
       },
       methods: {
         async selectFriend(friendName) {
-          const res = await setBuffer(this.outputSockets[friendName] || this.acceptSockets[friendName], friendName)
+          const socket = this.outputSockets[friendName] || this.acceptSockets[friendName];
+          const res = await this.setBuffer(socket, friendName);
+
+          if (!res.ok) {
+            return alert("error to select friend");
+          }
+
+          if (this.msgParserInterval) clearInterval(this.msgParserInterval);
+
+          this.msgParserInterval = setInterval(async () => {
+            try {
+              const raw = await this.fetchBuffers(friendName);
+              const msgs = raw.split("\r\n\r\n").filter(line => line.trim() !== "");
+
+              this.messages = [];
+              for (const msg of msgs) {
+                const msgEscaped = htmlEscape(msg);
+                this.messages.push(`${friendName}: ${msgEscaped}`);
+              }
+
+              this.buffer = this.messages.join("\r\n\r\n");
+            } catch (err) {
+              console.error("Error in message parser:", err);
+            }
+          }, 2500);
+          this.selectedFriend = friendName
         },
         async delFriend(friendName) {
 
@@ -168,15 +202,19 @@
           localStorage.setItem('friends', JSON.stringify(this.friends))
           console.log(`friend add succesfully ${this.friends}`)
         },
-        async sendMessage(id, _data) {
+        async sendMessage(_data) {
+          const receiver = this.selectedFriend
+          if (!receiver) return alert("Выберите получателя")
+          const socket = this.outputSockets[receiver] || this.acceptSockets[receiver];
           const res = await fetch('/api/sam/send', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ sockId: id, data: _data })
+              body: JSON.stringify({ sockId: socket, data: _data+"\r\n\r\n" })
             });           
             if (!res.ok) {
               return alert("err to send")
             }
+            this.messages.push(`${this.nickname}: ${_data}`)
             return true;
         },
         async sessionConnect(nick, dest) {
@@ -274,7 +312,8 @@
         async fetchBuffers(buffer) {
           const res = await fetch(`/api/sam/getBuffer/${buffer}`);
           const json = await res.json();
-          this.buffer = JSON.stringify(json, null, 2);
+          this.buffer = json.buffer
+          return this.buffer
         }
       }
     }).mount('#app')
