@@ -48,9 +48,14 @@
         <!-- Friends -->
         <div class="col-md-3 sidebar">
           <h5>Друзья</h5>
-          <div v-for="friend in ['Anon1', 'Anon2', 'Shad0w', 'Гость']" class="friend">
-            {{ friend }}
+          <div v-for="friend in friends" class="friend" @click="selectFriend(friend.name)">
+            {{ friend.name }} <button @click="delFriend(friend.name)">Del</button>
           </div>
+          <hr/>
+          <h6>Добавить друга</h6>
+          <label for="friendName">Имя друга:</label><input id="friendName"/> <br/>
+          <label for="friendPubKey">Ключ друга:</label><input id="friendPubKey"/><br/>
+          <button @click="addFriend">Добавить</button>
         </div>
 
         <!-- Interface -->
@@ -124,15 +129,45 @@
           title: 'DummyChat UI',
           buffer: '',
           pubkey: localStorage.getItem('pubkey'),
+          privkey: localStorage.getItem('privkey') || '',
           message: '',
           messages: [],
           sessions: {},
+          friends: JSON.parse(localStorage.getItem('friends')) || [],
           acceptSockets: {},
           outputSockets: {},
           nickname: 'You'
         }
       },
       methods: {
+        async selectFriend(friendName) {
+          const res = await setBuffer(this.outputSockets[friendName] || this.acceptSockets[friendName], friendName)
+        },
+        async delFriend(friendName) {
+
+          this.friends = this.friends.filter(f => f.name !== friendName);
+          localStorage.setItem('friends', JSON.stringify(this.friends));
+          delete this.sessions[friendName];
+          delete this.outputSockets[friendName];
+          delete this.acceptSockets[friendName];
+          console.log(`${friendName} was delete`);
+        },
+        async addFriend() {
+          const friendName = document.getElementById('friendName').value
+          const friendPubKey = document.getElementById('friendPubKey').value
+          if(!this.privkey) {
+            await this.genKeys();
+          }
+          const sessionId = await this.createSession(friendName, this.privkey)
+          if(!sessionId) return alert("Err to add (createSession)")
+          const sockId = await this.sessionConnect(friendName, friendPubKey);
+          if (!sockId) return alert("Err to connect")
+          this.sessions[friendName] = sessionId
+          this.outputSockets[friendName] = sockId
+          this.friends.push({name: friendName, pubkey: friendPubKey})
+          localStorage.setItem('friends', JSON.stringify(this.friends))
+          console.log(`friend add succesfully ${this.friends}`)
+        },
         async sendMessage(id, _data) {
           const res = await fetch('/api/sam/send', {
               method: 'POST',
@@ -151,10 +186,12 @@
               body: JSON.stringify({ nickname: nick, destination: dest })
             });           
             if (!res.ok) {
-              return alert("err to connect")
+              console.log ( await res.json() )
+              return false
             }
             const data = await res.json()
-            outputSockets[nick] = data.id
+            this.outputSockets[nick] = data.id
+            return data.id
         },
         async sessionAccept(nick) {
           const res = await fetch('/api/sam/session-accept', {
@@ -167,9 +204,10 @@
             }
             const data = await res.json()
             acceptSockets[nick] = data.id
+            return data.id
         },
         async createSession(nick, privkey=false) {
-            if (sessions[nick]){
+            if (this.sessions[nick]){
               return alert("session exists")
             }
             const key = privkey ? privkey : localStorage.getItem('privkey')
@@ -182,10 +220,13 @@
               body: JSON.stringify({ nickname: nick, privkey: key })
             });
             if (!res.ok) {
-              return alert('err')
+              console.log ( await res.json() )
+              return false
             }
-            const data = res.json();
-            sessions[nick] = data.id
+            console.log(`return data`)
+            const data = await res.json();
+            this.sessions[nick] = data.id
+            return data.id
         },
         async genKeys() {
           const res = await fetch('/api/sam/generateDestination/7')
@@ -197,6 +238,8 @@
             pubKeyInput.value = data.pubkey
             localStorage.setItem('privkey', data.privkey);
             localStorage.setItem('pubkey', data.pubkey);
+            privkey = data.privkey
+            pubkey = data.pubkey
           } else alert("Err")
         },
         async clearSockets() {
