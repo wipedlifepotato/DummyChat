@@ -2,8 +2,10 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>DummyChat UI</title>
   <script src="/static/js/vue.global.js"></script>
+  <link rel="stylesheet" href="css/bootstrap.css"/>
   <style>
     #settings {
       display: flex;
@@ -12,38 +14,103 @@
     #settings input, #settings button {
       max-width: 180px;
     }
+    body {
+      background-color: #f8f9fa;
+    }
+    #chatHistory {
+      height: 200px;
+      overflow-y: scroll;
+      border: 1px solid #ccc;
+      padding: 10px;
+      background: white;
+    }
+    .sidebar {
+      height: 200vh;
+      overflow-y: auto;
+      border-right: 1px solid #dee2e6;
+      background-color: #ffffff;
+      padding: 15px;
+    }
+    .friend {
+      padding: 8px;
+      border-bottom: 1px solid #e9ecef;
+      cursor: pointer;
+    }
+    .friend:hover {
+      background-color: #f1f1f1;
+    }
   </style>
 </head>
 <body>
   <div id="app">
-    <h1>{{ title }}</h1>
-    <label for="socketId">ID Socket: </label> <input id="socketId" />
-    <button @click="fetchBuffers">Получить буфер</button>
-    <pre>{{ buffer }}</pre>
+    <div class="container-fluid">
+      <div class="row">
+        <!-- Friends -->
+        <div class="col-md-3 sidebar">
+          <h5>Друзья</h5>
+          <div v-for="friend in ['Anon1', 'Anon2', 'Shad0w', 'Гость']" class="friend">
+            {{ friend }}
+          </div>
+        </div>
 
-    <hr/>
-    <section id="settings">
-      <h2> Настройки </h2>
-      <label for="samHOST">Хост SAM: </label><input id="samHOST" placeholder="127.0.0.1" />
-      <label for="samPORT">Хост SAM: </label><input id="samPORT" placeholder="7656" type="number" />
-      <label for="pubKey">Публичный ключ: </label><input id="pubKey" :value="pubkey" disabled />
-      <button @click="setSAM">Установить</button>
-      <button @click="clearSockets">Очистить сокеты</button>
-      <button @click="genKeys">Сгенерировать ключи</button>
-    </section>
-    <hr/>
-    <!-- TODO: -->
-    <section id="chatBox">
-      <h2>Чат</h2>
-      <label for=""></label>
-      <div id="chatHistory" style="border:1px solid #ccc; padding:10px; height:200px; overflow-y:scroll;">
-        <div v-for="msg in messages" :key="msg.id">
-          <strong>{{ msg.from }}:</strong> {{ msg.text }}
+        <!-- Interface -->
+        <div class="col-md-9 p-4">
+          <h1 class="mb-4">{{ title }}</h1>
+
+          <!-- SAM -->
+          <div class="card mb-4">
+            <div class="card-header">Настройки SAM</div>
+            <div class="card-body row g-3">
+              <div class="col-md-6">
+                <label for="samHOST" class="form-label">Хост SAM</label>
+                <input type="text" class="form-control" id="samHOST" placeholder="127.0.0.1">
+              </div>
+              <div class="col-md-6">
+                <label for="samPORT" class="form-label">Порт SAM</label>
+                <input type="number" class="form-control" id="samPORT" placeholder="7656">
+              </div>
+              <div class="col-md-12">
+                <label for="pubKey" class="form-label">Публичный ключ</label>
+                <input type="text" class="form-control" id="pubKey" :value="pubkey" disabled />
+              </div>
+              <div class="col-md-12 d-flex gap-2">
+                <button class="btn btn-primary" @click="setSAM">Установить</button>
+                <button class="btn btn-warning" @click="clearSockets">Очистить сокеты</button>
+                <button class="btn btn-success" @click="genKeys">Сгенерировать ключи</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Buffer -->
+          <div class="card mb-4">
+            <div class="card-header">Буфер</div>
+            <div class="card-body">
+              <div class="mb-3">
+                <label for="socketId" class="form-label">ID Socket</label>
+                <input type="text" class="form-control" id="socketId">
+              </div>
+              <button class="btn btn-secondary mb-3" @click="fetchBuffers">Получить буфер</button>
+              <pre>{{ buffer }}</pre>
+            </div>
+          </div>
+
+          <!-- Chat -->
+          <div class="card">
+            <div class="card-header">Чат</div>
+            <div class="card-body">
+              <div id="chatHistory" class="mb-3">
+                <div v-for="msg in messages" :key="msg.id">
+                  <strong>{{ msg.from }}:</strong> {{ msg.text }}
+                </div>
+              </div>
+              <textarea v-model="message" class="form-control mb-2" placeholder="Введите сообщение..." rows="3"></textarea>
+              <button class="btn btn-primary" @click="sendMessage">Отправить</button>
+            </div>
+          </div>
+
         </div>
       </div>
-      <textarea v-model="message" placeholder="Введите сообщение..." rows="3" style="width:100%;"></textarea>
-      <button @click="sendMessage">Отправить</button>
-    </section>
+    </div>
   </div>
 
   <script>
@@ -59,10 +126,67 @@
           pubkey: localStorage.getItem('pubkey'),
           message: '',
           messages: [],
-          nickname: 'You'  // можно будет менять
+          sessions: {},
+          acceptSockets: {},
+          outputSockets: {},
+          nickname: 'You'
         }
       },
       methods: {
+        async sendMessage(id, _data) {
+          const res = await fetch('/api/sam/send', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ sockId: id, data: _data })
+            });           
+            if (!res.ok) {
+              return alert("err to send")
+            }
+            return true;
+        },
+        async sessionConnect(nick, dest) {
+          const res = await fetch('/api/sam/session-connect', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ nickname: nick, destination: dest })
+            });           
+            if (!res.ok) {
+              return alert("err to connect")
+            }
+            const data = await res.json()
+            outputSockets[nick] = data.id
+        },
+        async sessionAccept(nick) {
+          const res = await fetch('/api/sam/session-accept', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ nickname: nick })
+            });
+            if (!res.ok) {
+                return alert("err with session create")
+            }
+            const data = await res.json()
+            acceptSockets[nick] = data.id
+        },
+        async createSession(nick, privkey=false) {
+            if (sessions[nick]){
+              return alert("session exists")
+            }
+            const key = privkey ? privkey : localStorage.getItem('privkey')
+            if (!key) {
+              return alert("Generate keys first")
+            }
+            const res = await fetch('/api/sam/session-create', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ nickname: nick, privkey: key })
+            });
+            if (!res.ok) {
+              return alert('err')
+            }
+            const data = res.json();
+            sessions[nick] = data.id
+        },
         async genKeys() {
           const res = await fetch('/api/sam/generateDestination/7')
           if(res.ok)
@@ -93,8 +217,19 @@
             const json = await res.json();
             console.log('setSAM result:', json);            
         },
-        async fetchBuffers() {
-          const res = await fetch('/api/sam/getBuffer/testbuf');
+        async setBuffer(id, bName) {
+          const res = await fetch('/api/sam/setBuffer', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ sockId: id, bufName: bName })
+            });           
+            if (!res.ok) {
+              return alert("err to set buffer")
+            }
+            return true;
+        },
+        async fetchBuffers(buffer) {
+          const res = await fetch(`/api/sam/getBuffer/${buffer}`);
           const json = await res.json();
           this.buffer = JSON.stringify(json, null, 2);
         }
