@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>DummyChat UI</title>
   <script src="/static/js/vue.global.js"></script>
+  <script src="/static/js/vue-i18n.global.prod.js"></script>
   <link rel="stylesheet" href="css/bootstrap.css"/>
   <style>
     #settings {
@@ -43,63 +44,53 @@
 </head>
 <body>
   <div id="app">
+    <select v-model="locale" @change="changeLocale">
+      <option value="ru">Русский</option>
+      <option value="en" >English</option>
+    </select>
     <div class="container-fluid">
       <div class="row">
         <!-- Friends -->
         <div class="col-md-3 sidebar">
-          <h5>Друзья</h5>
-          <button @click="mainInputStreamSet">Главный стрим</button>
+          <h5>{{ $t('friends') }}</h5>
+          <button @click="mainInputStreamSet">{{ $t('mainStream') }}</button>
           <div v-for="friend in friends" class="friend" @click="selectFriend(friend.name, friend.pubkey)">
-            {{ friend.name }} <button @click="delFriend(friend.name)">Del</button>
+            {{ friend.name }} <button @click="delFriend(friend.name)">{{ $t('del') }}</button>
           </div>
           <hr/>
-          <h6>Добавить друга</h6>
-          <label for="friendName">Имя друга:</label><input id="friendName"/> <br/>
-          <label for="friendPubKey">Ключ друга:</label><input id="friendPubKey"/><br/>
-          <button @click="addFriend">Добавить</button>
+          <h6>{{ $t('addFriend') }}</h6>
+          <label for="friendName">{{ $t('friendName') }}:</label><input id="friendName"/> <br/>
+          <label for="friendPubKey">{{ $t('friendPubKey') }}:</label><input id="friendPubKey"/><br/>
+          <button @click="addFriend">{{ $t('addFriend') }}</button>
         </div>
 
         <!-- Interface -->
         <div class="col-md-9 p-4">
-          <h1 class="mb-4">{{ title }}</h1>
+          <h1 class="mb-4">{{ $t('title') }}</h1>
 
           <!-- SAM -->
           <div class="card mb-4">
-            <div class="card-header">Настройки SAM</div>
+            <div class="card-header">{{ $t('SAMSettings') }}</div>
             <div class="card-body row g-3">
               <div class="col-md-6">
-                <label for="samHOST" class="form-label">Хост SAM</label>
+                <label for="samHOST" class="form-label">{{ $t('hostSAM') }}</label>
                 <input type="text" class="form-control" id="samHOST" placeholder="127.0.0.1">
               </div>
               <div class="col-md-6">
-                <label for="samPORT" class="form-label">Порт SAM</label>
+                <label for="samPORT" class="form-label">{{ $t('portSAM') }}</label>
                 <input type="number" class="form-control" id="samPORT" placeholder="7656">
               </div>
               <div class="col-md-12">
-                <label for="pubKey" class="form-label">Публичный ключ</label>
+                <label for="pubKey" class="form-label">{{ $t('pubkey') }}</label>
                 <input type="text" class="form-control" id="pubKey" :value="pubkey" disabled />
               </div>
               <div class="col-md-12 d-flex gap-2">
-                <button class="btn btn-primary" @click="setSAM">Установить</button>
-                <button class="btn btn-warning" @click="clearSockets">Очистить сокеты</button>
-                <button class="btn btn-success" @click="genKeys">Сгенерировать ключи</button>
+                <button class="btn btn-primary" @click="setSAM">{{ $t('set') }}</button>
+                <button class="btn btn-warning" @click="clearSockets">{{ $t('clearSockets') }} сокеты</button>
+                <button class="btn btn-success" @click="genKeys">{{ $t('genKeys') }}</button>
               </div>
             </div>
           </div>
-
-          <!-- Buffer -->
-          <div class="card mb-4">
-            <div class="card-header">Буфер</div>
-            <div class="card-body">
-              <div class="mb-3">
-                <label for="socketId" class="form-label">ID Socket</label>
-                <input type="text" class="form-control" id="socketId">
-              </div>
-              <button class="btn btn-secondary mb-3" @click="fetchBuffers">Получить буфер</button>
-              <pre>{{ buffer }}</pre>
-            </div>
-          </div>
-
           <!-- Chat -->
           <div class="card">
             <div class="card-header">Чат</div>
@@ -111,7 +102,7 @@
                 </div>
               </div>
               <textarea v-model="message" id="messageText" class="form-control mb-2" placeholder="Введите сообщение..." rows="3"></textarea>
-              <button class="btn btn-primary" @click="sendMessage">Отправить</button>
+              <button class="btn btn-primary" @click="sendMessage">{{ $t('send') }}</button>
             </div>
           </div>
 

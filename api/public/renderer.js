@@ -8,7 +8,52 @@ function htmlEscape(str) {
   }
   
   const { createApp } = Vue;
-  
+  const { createI18n } = VueI18n
+
+  const messages = {
+    en: {
+      title: 'DummyChat UI',
+      send: 'Send',
+      selectFriend: 'Select a friend',
+      friends: 'Friends',
+      mainStream: 'main stream',
+      del: 'delete',
+      addFriend: 'Add friend',
+      friendName: 'Nickname of friend',
+      friendPubKey: 'Pubkey of friend',
+      hostSAM: 'host SAM',
+      portSAM: 'port SAM',
+      genKeys: "generate keys",
+      pubkey: "public key",
+      clearSockets: "clear all sockets",
+      set: "set",
+      SAMSettings: "Settings of SAM protocol"
+    },
+    ru: {
+      title: 'DummyChat UI',
+      send: 'Отправить',
+      selectFriend: 'Выберите друга',
+      friends: 'Друзья',
+      mainStream: 'Главный стрим',
+      del: 'удалить',
+      addFriend: 'Добавить друга',
+      friendName: 'Никнейм друга',
+      friendPubKey: 'Публичный ключ друга',
+      hostSAM: 'Хост SAM',
+      portSAM: 'Порт SAM',
+      genKeys: "Сгенерировать ключи",
+      pubkey: "публичный ключ",
+      clearSockets: "очистить сокеты",
+      set: "установить",
+      SAMSettings: "Настройки SAM"
+    }
+  }
+
+  const i18n = createI18n({
+    locale: 'en', 
+    fallbackLocale: 'en',
+    messages,
+  })
   createApp({
     data() {
       return {
@@ -18,7 +63,7 @@ function htmlEscape(str) {
         privkey: localStorage.getItem("privkey") || "",
         message: "",
         messages: [],
-  
+        locale: 'en',
         sessions: JSON.parse(localStorage.getItem("sessions")) || {},
         friends: JSON.parse(localStorage.getItem("friends")) || [],
   
@@ -31,6 +76,11 @@ function htmlEscape(str) {
         lastBuffer: "",
       };
     },
+    watch: {
+        locale(newLocale) {
+          this.$i18n.locale = newLocale;
+        }
+    },
     async mounted() {
       if (!this.privkey) {
         await this.genKeys();
@@ -38,6 +88,10 @@ function htmlEscape(str) {
       await this.restoreSessionsAndSockets();
     },
     methods: {
+      changeLocale() {
+            this.$i18n.locale = this.locale;
+            document.title = this.$t('title');
+      },
       async restoreSessionsAndSockets() {
         for (const friend of this.friends) {
           const friendName = friend.name;
@@ -309,5 +363,5 @@ function htmlEscape(str) {
         }
       },
     },
-  }).mount("#app");
+  }).use(i18n).mount("#app");
   
