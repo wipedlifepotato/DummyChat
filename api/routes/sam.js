@@ -145,6 +145,7 @@ router.get('/generateDestination/:type', async (req, res) => {
  */
 
 router.post('/session-create', async (req, res) => {
+  console.log(`create session`)
   const { nickname, privkey } = req.body;
   if (!nickname) return res.status(400).json({ error: 'nickname required' });
 
@@ -153,7 +154,7 @@ router.post('/session-create', async (req, res) => {
     const socket = await mSam.sessionCreate(nickname, privkey);
     const id = uuidv4();
     samSockets.set(id, socket);
-    res.json({ status: 'ok', id });
+    await res.json({ status: 'ok', id });
   } catch (e) {
     res.status(500).json({ error: e.message || 'Failed to create session' });
   }
@@ -277,6 +278,7 @@ router.post('/session-accept', async (req, res) => {
  *                   example: Connect failed
  */
 router.post('/session-connect', async (req, res) => {
+  console.log(`session connect`)
   const { nickname, destination } = req.body;
   if (!nickname || !destination) return res.status(400).json({ error: 'nickname and destination required' });
 
@@ -487,7 +489,6 @@ router.post('/setBuffer', async (req, res) => {
   if (!sockId || !bufName) {
     return res.status(400).json({ error: 'sockId and bufName are required' });
   }
-
   const socket = samSockets.get(sockId);
   if (!socket) {
     return res.status(404).json({ error: 'Socket not found' });
@@ -495,7 +496,7 @@ router.post('/setBuffer', async (req, res) => {
 
   if (!buffers.has(bufName)) {
     buffers.set(bufName, '');
-    return res.status(500).json({error: "already exists, clear buf"})
+    return res.status(200).json({error: "already exists, clear buf"})
   }
 
   socket.on('data', (data) => {
@@ -503,7 +504,7 @@ router.post('/setBuffer', async (req, res) => {
     buffers.set(bufName, current + data.toString());
   });
 
-  res.json({ status: 'ok', message: `Buffer "${bufName}" is set on socket "${id}"` });
+  res.json({ status: 'ok', message: `Buffer "${bufName}" is set on socket "${sockId}"` });
 });
 
 

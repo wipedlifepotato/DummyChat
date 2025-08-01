@@ -48,7 +48,7 @@
         <!-- Friends -->
         <div class="col-md-3 sidebar">
           <h5>Друзья</h5>
-          <div v-for="friend in friends" class="friend" @click="selectFriend(friend.name)">
+          <div v-for="friend in friends" class="friend" @click="selectFriend(friend.name, friend.pubkey)">
             {{ friend.name }} <button @click="delFriend(friend.name)">Del</button>
           </div>
           <hr/>
@@ -104,11 +104,12 @@
             <div class="card-header">Чат</div>
             <div class="card-body">
               <div id="chatHistory" class="mb-3">
-                <div v-for="msg in messages" :key="msg.id">
-                  <strong>{{ msg.from }}:</strong> {{ msg.text }}
+                <div v-for="msg in messages" :key="msg.text">
+                  <strong :style="{ color: msg.from === nickname ? 'green' : 'blue' }">{{ msg.from }}:</strong>
+                  {{ msg.text }}
                 </div>
               </div>
-              <textarea v-model="message" class="form-control mb-2" placeholder="Введите сообщение..." rows="3"></textarea>
+              <textarea v-model="message" id="messageText" class="form-control mb-2" placeholder="Введите сообщение..." rows="3"></textarea>
               <button class="btn btn-primary" @click="sendMessage">Отправить</button>
             </div>
           </div>
@@ -149,32 +150,49 @@
         }
       },
       methods: {
-        async selectFriend(friendName) {
-          const socket = this.outputSockets[friendName] || this.acceptSockets[friendName];
+        async selectFriend(friendName, pubkey) {
+          if (!this.sessions[friendName])
+          {
+            const res = await this.createSession(friendName, this.privkey)
+            this.sessions[friendName] = res
+            //if(!res) alert("can't create session")
+          }
+          console.log(`friend name: ${friendName}`)
+          let socket = this.outputSockets[friendName] || this.acceptSockets[friendName];
+          if(!socket) 
+          {
+            socket = await this.sessionConnect(friendName, pubkey)
+            if(! socket ) {
+              alert("Can't reach friend")
+              return false
+            } 
+          }
+          console.log(`socket: ${socket}`)
           const res = await this.setBuffer(socket, friendName);
 
-          if (!res.ok) {
-            return alert("error to select friend");
+          if (!res) {
+             alert("error to select friend");
+             return false
           }
 
           if (this.msgParserInterval) clearInterval(this.msgParserInterval);
+          this.lastBuffer = '';
 
-          this.msgParserInterval = setInterval(async () => {
-            try {
-              const raw = await this.fetchBuffers(friendName);
-              const msgs = raw.split("\r\n\r\n").filter(line => line.trim() !== "");
+            this.msgParserInterval = setInterval(async () => {
+              const buffer = await this.fetchBuffers(friendName);
+              
+              if (!buffer || buffer === this.lastBuffer) return; 
 
-              this.messages = [];
+              const msgs = buffer.slice(this.lastBuffer.length).split("\r\n");
+              this.lastBuffer = buffer;
+
               for (const msg of msgs) {
+                if (!msg.trim()) continue;
                 const msgEscaped = htmlEscape(msg);
-                this.messages.push(`${friendName}: ${msgEscaped}`);
+                this.messages.push({ from: friendName, text: msgEscaped });
               }
-
-              this.buffer = this.messages.join("\r\n\r\n");
-            } catch (err) {
-              console.error("Error in message parser:", err);
-            }
-          }, 2500);
+              this.buffer = this.messages.map(m => `${m.from}: ${m.text}`).join("\r\n");
+            }, 2500);
           this.selectedFriend = friendName
         },
         async delFriend(friendName) {
@@ -202,7 +220,9 @@
           localStorage.setItem('friends', JSON.stringify(this.friends))
           console.log(`friend add succesfully ${this.friends}`)
         },
-        async sendMessage(_data) {
+        async sendMessage() {
+          const messageText = document.getElementById('messageText')
+          const _data = messageText.value
           const receiver = this.selectedFriend
           if (!receiver) return alert("Выберите получателя")
           const socket = this.outputSockets[receiver] || this.acceptSockets[receiver];
@@ -214,7 +234,7 @@
             if (!res.ok) {
               return alert("err to send")
             }
-            this.messages.push(`${this.nickname}: ${_data}`)
+            this.messages.push({ from: this.nickname, text: _data });
             return true;
         },
         async sessionConnect(nick, dest) {
@@ -299,15 +319,25 @@
             console.log('setSAM result:', json);            
         },
         async setBuffer(id, bName) {
-          const res = await fetch('/api/sam/setBuffer', {
+          console.log(`id: ${id}, bufname: ${bName}`)
+          try {
+            const res = await fetch('/api/sam/setBuffer', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ sockId: id, bufName: bName })
-            });           
+            });
+
             if (!res.ok) {
-              return alert("err to set buffer")
+              alert("err to set buffer: " + res.statusText);
+              return false;
             }
+
             return true;
+          } catch (err) {
+            console.error("Ошибка запроса к /api/sam/setBuffer:", err);
+            alert("Ошибка сети или сервера при setBuffer");
+            return false;
+          }
         },
         async fetchBuffers(buffer) {
           const res = await fetch(`/api/sam/getBuffer/${buffer}`);
