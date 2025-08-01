@@ -6,274 +6,308 @@ function htmlEscape(str) {
       .replace(/"/g, "&quot;")
       .replace(/'/g, "&#39;");
   }
-
-  const { createApp } = Vue
-
+  
+  const { createApp } = Vue;
+  
   createApp({
     data() {
       return {
-        title: 'DummyChat UI',
-        buffer: '',
-        pubkey: localStorage.getItem('pubkey'),
-        privkey: localStorage.getItem('privkey') || '',
-        message: '',
+        title: "DummyChat UI",
+        buffer: "",
+        pubkey: localStorage.getItem("pubkey"),
+        privkey: localStorage.getItem("privkey") || "",
+        message: "",
         messages: [],
-        sessions: {},
-        friends: JSON.parse(localStorage.getItem('friends')) || [],
-        acceptSockets: {},
-        outputSockets: {},
-        nickname: 'You',
-        msgParserInterval: false,
-        selectedFriend: '',
-        mainInputSocket: {}
-      }
+  
+        sessions: JSON.parse(localStorage.getItem("sessions")) || {},
+        friends: JSON.parse(localStorage.getItem("friends")) || [],
+  
+        acceptSockets: JSON.parse(localStorage.getItem("acceptSockets")) || {},
+        outputSockets: JSON.parse(localStorage.getItem("outputSockets")) || {},
+  
+        nickname: "You",
+        msgParserInterval: null,
+        selectedFriend: "",
+        lastBuffer: "",
+      };
     },
     async mounted() {
-      this.initSessions().then( () => {
-        console.log(`session inited`)
-      })
+      if (!this.privkey) {
+        await this.genKeys();
+      }
+      await this.restoreSessionsAndSockets();
     },
     methods: {
-      async mainInputStreamSet() {
-        if (this.msgParserInterval) clearInterval(this.msgParserInterval);
-        this.lastBuffer = '';
-
-          this.msgParserInterval = setInterval(async () => {
-            const buffer = await this.fetchBuffers('mainInputSocket');
-            
-            if (!buffer || buffer === this.lastBuffer) return; 
-
-            const msgs = buffer.slice(this.lastBuffer.length).split("\r\n");
-            this.lastBuffer = buffer;
-
-            for (const msg of msgs) {
-              if (!msg.trim()) continue;
-              const msgEscaped = htmlEscape(msg);
-              this.messages.push({ from: friendName, text: msgEscaped });
-            }
-            this.buffer = this.messages.map(m => `${m.from}: ${m.text}`).join("\r\n");
-          }, 2500);        },
-      async initSessions() {
-        if (this.privkey) {
-          const data = await this.createSession('mainInputSocket', this.privkey);
-          this.sessions['mainInputSocket'] = data;
-          this.selectedFriend = 'mainInputSocket'
-          const acceptSocket = await this.sessionAccept('mainInputSocket');
-          this.mainInputSocket = acceptSocket;
-          await this.setBuffer(this.mainInputSocket, 'mainInputSocket');
-          
-        }
-
+      async restoreSessionsAndSockets() {
         for (const friend of this.friends) {
-          if (!this.sessions[friend.name]) {
-            console.log(`init session`);
-            const data = await this.createSession(friend.name, this.privkey);
-            if (!data) {
-              console.log(`session exists already`);
-            } else {
-              this.sessions[friend.name] = data;
+          const friendName = friend.name;
+          const friendPubKey = friend.pubkey;
+  
+          if (!this.sessions[friendName]) {
+            const sessionId = await this.createSession(friendName, this.privkey);
+            if (sessionId) this.sessions[friendName] = sessionId;
+          }
+  
+          if (!this.acceptSockets[friendName]) {
+            const acceptId = await this.sessionAccept(friendName);
+            if (acceptId) {
+              this.acceptSockets[friendName] = acceptId;
+              await this.setBuffer(acceptId, friendName + "_input");
             }
           }
-          const acceptSocket = await this.sessionAccept(friend.name);
-          this.acceptSockets[friend.name] = acceptSocket; // БЫЛА ОШИБКА: friendName → friend.name
-        }
-      },
-      async selectFriend(friendName, pubkey) {
-        if (!this.sessions[friendName])
-        {
-          const res = await this.createSession(friendName, this.privkey)
-          if(res) this.sessions[friendName] = res
-          else console.log(`session exists already`)
-          //if(!res) alert("can't create session")
-        }
-        console.log(`friend name: ${friendName}`)
-        let socket = this.outputSockets[friendName] || this.acceptSockets[friendName];
-        if(!socket) 
-        {
-          socket = await this.sessionConnect(friendName, pubkey)
-          if(! socket ) {
-            alert("Can't reach friend")
-            return false
-          } 
-        }
-        console.log(`socket: ${socket}`)
-        const res = await this.setBuffer(socket, friendName);
-
-        if (!res) {
-           alert("error to select friend");
-           return false
-        }
-
-        if (this.msgParserInterval) clearInterval(this.msgParserInterval);
-        this.lastBuffer = '';
-
-          this.msgParserInterval = setInterval(async () => {
-            const buffer = await this.fetchBuffers(friendName);
-            
-            if (!buffer || buffer === this.lastBuffer) return; 
-
-            const msgs = buffer.slice(this.lastBuffer.length).split("\r\n");
-            this.lastBuffer = buffer;
-
-            for (const msg of msgs) {
-              if (!msg.trim()) continue;
-              const msgEscaped = htmlEscape(msg);
-              this.messages.push({ from: friendName, text: msgEscaped });
+  
+          if (!this.outputSockets[friendName]) {
+            const connectId = await this.sessionConnect(friendName, friendPubKey);
+            if (connectId) {
+              this.outputSockets[friendName] = connectId;
+              await this.setBuffer(connectId, friendName + "_output");
             }
-            this.buffer = this.messages.map(m => `${m.from}: ${m.text}`).join("\r\n");
-          }, 2500);
-        this.selectedFriend = friendName
+          }
+        }
+  
+        this.saveAllToLocalStorage();
+  
+        if (this.friends.length > 0) {
+          this.selectFriend(this.friends[0].name, this.friends[0].pubkey);
+        }
       },
+  
+      saveAllToLocalStorage() {
+        localStorage.setItem("sessions", JSON.stringify(this.sessions));
+        localStorage.setItem("acceptSockets", JSON.stringify(this.acceptSockets));
+        localStorage.setItem("outputSockets", JSON.stringify(this.outputSockets));
+        localStorage.setItem("friends", JSON.stringify(this.friends));
+      },
+  
+      async selectFriend(friendName, pubkey) {
+        this.selectedFriend = friendName;
+  
+        if (!this.sessions[friendName]) {
+          const sessionId = await this.createSession(friendName, this.privkey);
+          if (sessionId) this.sessions[friendName] = sessionId;
+        }
+  
+        let socket = this.outputSockets[friendName] || this.acceptSockets[friendName];
+        if (!socket) {
+          socket = await this.sessionConnect(friendName, pubkey);
+          if (!socket) {
+            alert("Can't reach friend");
+            return false;
+          }
+          this.outputSockets[friendName] = socket;
+          await this.setBuffer(socket, friendName + "_output");
+        }
+  
+        if (this.msgParserInterval) clearInterval(this.msgParserInterval);
+        this.lastBuffer = "";
+        this.messages = [];
+  
+        this.msgParserInterval = setInterval(async () => {
+          const inputBuffer = await this.fetchBuffers(friendName + "_input");
+          const outputBuffer = await this.fetchBuffers(friendName + "_output");
+          if (inputBuffer === false && outputBuffer === false) {
+            const acceptSockets = JSON.parse(localStorage.getItem('acceptSockets') || '{}');
+            const outputSockets = JSON.parse(localStorage.getItem('outputSockets') || '{}');
+            const sessions = JSON.parse(localStorage.getItem('sessions') || '{}');
+          
+            delete acceptSockets[friendName];
+            delete outputSockets[friendName];
+            delete sessions[friendName];
+          
+            localStorage.setItem('acceptSockets', JSON.stringify(acceptSockets));
+            localStorage.setItem('outputSockets', JSON.stringify(outputSockets));
+            localStorage.setItem('sessions', JSON.stringify(sessions));
+          
+            delete this.acceptSockets[friendName];
+            delete this.outputSockets[friendName];
+            delete this.sessions[friendName];
+          
+            console.log(`Sockets and sessions for ${friendName} removed due to empty buffers.`);
+            location.reload();
+          }
+          const combinedBuffer = (inputBuffer || "") + "\r\n" + (outputBuffer || "");
+  
+          if (!combinedBuffer || combinedBuffer === this.lastBuffer) return;
+  
+          const newText = combinedBuffer.slice(this.lastBuffer.length);
+          this.lastBuffer = combinedBuffer;
+  
+          const msgs = newText.split("\r\n");
+          for (const msg of msgs) {
+            if (!msg.trim()) continue;
+  
+            const msgEscaped = htmlEscape(msg);
+  
+            this.messages.push({ from: friendName, text: msgEscaped });
+          }
+        }, 1500);
+  
+        return true;
+      },
+  
+      async addFriend() {
+        const friendName = document.getElementById("friendName").value.trim();
+        const friendPubKey = document.getElementById("friendPubKey").value.trim();
+        if (!friendName || !friendPubKey) {
+          return alert("Введите имя и pubkey друга");
+        }
+        if (!this.privkey) await this.genKeys();
+  
+        const sessionId = await this.createSession(friendName, this.privkey);
+        if (!sessionId) return alert("Err to add (createSession)");
+  
+        const sockId = await this.sessionConnect(friendName, friendPubKey);
+        if (!sockId) return alert("Err to connect");
+  
+        this.sessions[friendName] = sessionId;
+        this.outputSockets[friendName] = sockId;
+        this.acceptSockets[friendName] = await this.sessionAccept(friendName);
+  
+        await this.setBuffer(sockId, friendName + "_output");
+        await this.setBuffer(this.acceptSockets[friendName], friendName + "_input");
+  
+        this.friends.push({ name: friendName, pubkey: friendPubKey });
+        this.saveAllToLocalStorage();
+        console.log(`friend added successfully: ${friendName}`);
+      },
+  
       async delFriend(friendName) {
-
-        this.friends = this.friends.filter(f => f.name !== friendName);
-        localStorage.setItem('friends', JSON.stringify(this.friends));
+        this.friends = this.friends.filter((f) => f.name !== friendName);
         delete this.sessions[friendName];
         delete this.outputSockets[friendName];
         delete this.acceptSockets[friendName];
-        console.log(`${friendName} was delete`);
+        this.saveAllToLocalStorage();
+        console.log(`${friendName} was deleted`);
       },
-      async addFriend() {
-        const friendName = document.getElementById('friendName').value
-        const friendPubKey = document.getElementById('friendPubKey').value
-        if(!this.privkey) {
-          await this.genKeys();
-        }
-        const sessionId = await this.createSession(friendName, this.privkey)
-        if(!sessionId) return alert("Err to add (createSession)")
-        const sockId = await this.sessionConnect(friendName, friendPubKey);
-        if (!sockId) return alert("Err to connect")
-        this.sessions[friendName] = sessionId
-        this.outputSockets[friendName] = sockId
-        this.friends.push({name: friendName, pubkey: friendPubKey})
-        localStorage.setItem('friends', JSON.stringify(this.friends))
-        console.log(`friend add succesfully ${this.friends}`)
-      },
+  
       async sendMessage() {
-        const messageText = document.getElementById('messageText')
-        const _data = messageText.value
-        const receiver = this.selectedFriend
-        if (!receiver) return alert("Выберите получателя")
+        if (!this.selectedFriend) return alert("Выберите получателя");
+  
+        const messageText = document.getElementById("messageText");
+        const _data = messageText.value.trim();
+        if (!_data) return;
+  
+        const receiver = this.selectedFriend;
         const socket = this.outputSockets[receiver] || this.acceptSockets[receiver];
-        const res = await fetch('/api/sam/send', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ sockId: socket, data: _data+"\r\n\r\n" })
-          });           
-          if (!res.ok) {
-            return alert("err to send")
-          }
-          this.messages.push({ from: this.nickname, text: _data });
-          return true;
+        if (!socket) return alert("Socket not found for sending");
+  
+        const res = await fetch("/api/sam/send", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sockId: socket, data: "  "+_data + "\r\n" }),
+        });
+  
+        if (!res.ok) return alert("Error sending message");
+  
+        this.messages.push({ from: this.nickname, text: _data });
+        messageText.value = "";
+        return true;
       },
+  
       async sessionConnect(nick, dest) {
-        const res = await fetch('/api/sam/session-connect', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ nickname: nick, destination: dest })
-          });           
-          if (!res.ok) {
-            console.log ( await res.json() )
-            return false
-          }
-          const data = await res.json()
-          this.outputSockets[nick] = data.id
-          return data.id
+        const res = await fetch("/api/sam/session-connect", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ nickname: nick, destination: dest }),
+        });
+        if (!res.ok) {
+          console.log(await res.json());
+          return false;
+        }
+        const data = await res.json();
+        this.outputSockets[nick] = data.id;
+        await this.setBuffer(data.id, nick + "_output");
+        this.saveAllToLocalStorage();
+        return data.id;
       },
+  
       async sessionAccept(nick) {
-        const res = await fetch('/api/sam/session-accept', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ nickname: nick })
-          });
-          if (!res.ok) {
-              return alert("err with session create")
-          }
-          const data = await res.json()
-          this.acceptSockets[nick] = data.id
-          return data.id
+        const res = await fetch("/api/sam/session-accept", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ nickname: nick }),
+        });
+        if (!res.ok) {
+          alert("Error with session accept");
+          return false;
+        }
+        const data = await res.json();
+        this.acceptSockets[nick] = data.id;
+        await this.setBuffer(data.id, nick + "_input");
+        this.saveAllToLocalStorage();
+        return data.id;
       },
-      async createSession(nick, privkey=false) {
-          if (this.sessions[nick]){
-            //return alert("session exists")
-            return;
-          }
-          const key = privkey ? privkey : localStorage.getItem('privkey')
-          if (!key) {
-            return alert("Generate keys first")
-          }
-          const res = await fetch('/api/sam/session-create', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ nickname: nick, privkey: key })
-          });
-          if (!res.ok) {
-            console.log ( await res.json() )
-            return false
-          }
-          console.log(`return data`)
-          const data = await res.json();
-          this.sessions[nick] = data.id
-          return data.id
+  
+      async createSession(nick, privkey = false) {
+        if (this.sessions[nick]) return;
+  
+        const key = privkey ? privkey : localStorage.getItem("privkey");
+        if (!key) {
+          alert("Generate keys first");
+          return false;
+        }
+  
+        const res = await fetch("/api/sam/session-create", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ nickname: nick, privkey: key }),
+        });
+        if (!res.ok) {
+          console.log(await res.json());
+          return false;
+        }
+        const data = await res.json();
+        this.sessions[nick] = data.id;
+        this.saveAllToLocalStorage();
+        return data.id;
       },
+  
       async genKeys() {
-        const res = await fetch('/api/sam/generateDestination/7')
-        if(res.ok)
-        {
-          const pubKeyInput = document.getElementById('pubKey')
+        const res = await fetch("/api/sam/generateDestination/7");
+        if (res.ok) {
           const data = await res.json();
-          console.log(data)
-          pubKeyInput.value = data.pubkey
-          localStorage.setItem('privkey', data.privkey);
-          localStorage.setItem('pubkey', data.pubkey);
-          privkey = data.privkey
-          pubkey = data.pubkey
-        } else alert("Err")
+          localStorage.setItem("privkey", data.privkey);
+          localStorage.setItem("pubkey", data.pubkey);
+          this.privkey = data.privkey;
+          this.pubkey = data.pubkey;
+  
+          const pubKeyInput = document.getElementById("pubKey");
+          if (pubKeyInput) pubKeyInput.value = data.pubkey;
+        } else {
+          alert("Error generating keys");
+        }
       },
-      async clearSockets() {
-        const res = await fetch('/api/sam/clear')
-        if (res.ok) console.log(`cleared`)
-        else alert("Err")
-      },
-      async setSAM() {
-          const SAMHost = document.getElementById('samHOST').value
-          const SAMPORT = document.getElementById('samPORT').value
-          const res = await fetch('/api/sam/setSAM', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ host: SAMHost, port: SAMPORT })
-          });
-          if (!res.ok) return alert("Err")
-
-          const json = await res.json();
-          console.log('setSAM result:', json);            
-      },
+  
       async setBuffer(id, bName) {
-        console.log(`id: ${id}, bufname: ${bName}`)
         try {
-          const res = await fetch('/api/sam/setBuffer', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ sockId: id, bufName: bName })
+          const res = await fetch("/api/sam/setBuffer", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ sockId: id, bufName: bName }),
           });
-
           if (!res.ok) {
-            alert("err to set buffer: " + res.statusText);
+            alert("Error setting buffer: " + res.statusText);
             return false;
           }
-
           return true;
         } catch (err) {
-          console.error("Ошибка запроса к /api/sam/setBuffer:", err);
-          alert("Ошибка сети или сервера при setBuffer");
+          console.error("Error in setBuffer:", err);
+          alert("Network/server error in setBuffer");
           return false;
         }
       },
-      async fetchBuffers(buffer) {
-        const res = await fetch(`/api/sam/getBuffer/${buffer}`);
-        const json = await res.json();
-        this.buffer = json.buffer
-        return this.buffer
-      }
-    }
-  }).mount('#app')
+  
+      async fetchBuffers(bufferName) {
+        try {
+          const res = await fetch(`/api/sam/getBuffer/${bufferName}`);
+          if (!res.ok) return false;
+  
+          const json = await res.json();
+          return json.buffer || "";
+        } catch {
+          return "";
+        }
+      },
+    },
+  }).mount("#app");
+  
