@@ -1,0 +1,52 @@
+{
+  "name": "dummychat",
+  "version": "0.1.0",
+  "description": "I2P/SAM Chat",
+  "appId": "world.wipedlifepotato.dummychat",
+  "productName": "DummyChat",
+  "files": [
+    "main.js",
+    "preload.js",
+    "api/**/*",
+    "node_modules/**/*",
+    "package.json"
+  ],
+  "asar": true,
+  "linux": {
+    "target": [
+      "AppImage",
+      "deb"
+    ]
+  },
+  "win": {
+    "target": [
+      "portable"
+    ]
+  },
+  "mac": {
+    "target": [
+      "dmg"
+    ]
+  },
+  "main": "main.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "api": "cd api && node index.js",
+    "dev": "electron .",
+    "build": "electron-builder"
+  },
+  "author": "wipedlifepotato",
+  "license": "ISC",
+  "devDependencies": {
+    "electron": "^37.2.5",
+    "electron-builder": "^26.0.12"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.1",
+    "express": "^5.1.0",
+    "swagger-jsdoc": "^6.2.8",
+    "swagger-ui-express": "^5.0.1",
+    "uuid": "^11.1.0"
+  }
+}
