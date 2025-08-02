@@ -200,13 +200,13 @@ function htmlEscape(str) {
       },
   
       async addFriend() {
-        const friendName = document.getElementById("friendName").value.trim();
+       const friendName = document.getElementById("friendName").value.trim();
         const friendPubKey = document.getElementById("friendPubKey").value.trim();
         if (!friendName || !friendPubKey) {
           return alert("Введите имя и pubkey друга");
         }
         if (!this.privkey) await this.genKeys();
-  
+        /*
         const sessionId = await this.createSession(friendName, this.privkey);
         if (!sessionId) alert("Err to add (createSession)");
   
@@ -218,11 +218,12 @@ function htmlEscape(str) {
         this.acceptSockets[friendName] = await this.sessionAccept(friendName);
   
         await this.setBuffer(sockId, friendName + "_output");
-        await this.setBuffer(this.acceptSockets[friendName], friendName + "_input");
-  
+        await this.setBuffer(this.acceptSockets[friendName], friendName + "_input");*/
+        //this.selectFriend(thisfriendName, this.friends[0].pubkey);
         this.friends.push({ name: friendName, pubkey: friendPubKey });
         this.saveAllToLocalStorage();
         console.log(`friend added successfully: ${friendName}`);
+        location.reload();
       },
   
       async delFriend(friendName) {
