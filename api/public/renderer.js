@@ -208,13 +208,13 @@ function htmlEscape(str) {
         if (!this.privkey) await this.genKeys();
   
         const sessionId = await this.createSession(friendName, this.privkey);
-        if (!sessionId) return alert("Err to add (createSession)");
+        if (!sessionId) alert("Err to add (createSession)");
   
         const sockId = await this.sessionConnect(friendName, friendPubKey);
-        if (!sockId) return alert("Err to connect");
+        if (!sockId) alert("Err to connect");
   
-        this.sessions[friendName] = sessionId;
-        this.outputSockets[friendName] = sockId;
+        if(sessionId) this.sessions[friendName] = sessionId;
+        if(sockId) this.outputSockets[friendName] = sockId;
         this.acceptSockets[friendName] = await this.sessionAccept(friendName);
   
         await this.setBuffer(sockId, friendName + "_output");
