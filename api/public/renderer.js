@@ -85,6 +85,11 @@ function htmlEscape(str) {
       if (!this.privkey) {
         await this.genKeys();
       }
+      await this.getSockets();
+
+      this.socketsInterval = setInterval(() => {
+        this.getSockets();
+      }, 2500);
       await this.restoreSessionsAndSockets();
     },
     methods: {
@@ -98,10 +103,9 @@ function htmlEscape(str) {
           const friendName = friend.name;
           const friendPubKey = friend.pubkey;
   
-          if (!this.sessions[friendName]) {
-            const sessionId = await this.createSession(friendName, this.privkey);
-            if (sessionId) this.sessions[friendName] = sessionId;
-          }
+          const sessionId = await this.createSession(friendName, this.privkey);
+          if (sessionId) this.sessions[friendName] = sessionId;
+          
   
           if (!this.acceptSockets[friendName]) {
             const acceptId = await this.sessionAccept(friendName);
@@ -183,7 +187,7 @@ function htmlEscape(str) {
             delete this.sessions[friendName];
           
             console.log(`Sockets and sessions for ${friendName} removed due to empty buffers.`);
-            location.reload();
+            //location.reload();
           }
           const combinedBuffer = (inputBuffer || "") + "\r\n" + (outputBuffer || "");
   
@@ -195,10 +199,20 @@ function htmlEscape(str) {
           const msgs = newText.split("\r\n");
           for (const msg of msgs) {
             if (!msg.trim()) continue;
-  
-            const msgEscaped = htmlEscape(msg);
-  
-            this.messages.push({ from: friendName, text: msgEscaped });
+        
+            let skip = false;
+            try {
+              const parsed = JSON.parse(msg);
+              if (parsed && parsed.pubkey) {
+                skip = true; 
+              }
+            } catch (e) {
+            }
+        
+            if (!skip) {
+              const msgEscaped = htmlEscape(msg);
+              this.messages.push({ from: friendName, text: msgEscaped });
+            }
           }
         }, 1500);
   
@@ -249,13 +263,27 @@ function htmlEscape(str) {
   
         this.messages.push({ from: this.nickname, text: _data });
         messageText.value = "";
-        this.$nextTick(() => {
-          const chat = document.getElementById('chatHistory');
-          chat.scrollTop = chat.scrollHeight;
-        });
         return true;
       },
-  
+      async getSockets() {
+        try {
+          const res = await fetch('/api/sam/sockets');
+          if (!res.ok) throw new Error("Failed to fetch sockets");
+          const data = await res.json();
+      
+          for (const sock of data.sockets) {
+            const fr = this.friends.filter(f => f.pubkey === sock.friendPubKey);
+            if (fr.length > 0) {
+              const friend = fr[0];
+              this.outputSockets[friend.name] = sock.id;
+              this.acceptSockets[friend.name] = sock.id;
+              this.saveAllToLocalStorage();
+            }
+          }
+        } catch (e) {
+          console.error("Error in getSockets:", e);
+        }
+      },      
       async sessionConnect(nick, dest) {
         const res = await fetch("/api/sam/session-connect", {
           method: "POST",
@@ -273,6 +301,11 @@ function htmlEscape(str) {
         }
         await this.setBuffer(data.id, nick + "_output");
         this.saveAllToLocalStorage();
+        const res1 = await fetch("/api/sam/send", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sockId: data.id, data: JSON.stringify({pubkey: this.pubkey}) }),
+        });
         return data.id;
       },
   
@@ -283,7 +316,7 @@ function htmlEscape(str) {
           body: JSON.stringify({ nickname: nick }),
         });
         if (!res.ok) {
-          alert("Error with session accept");
+          //alert("Error with session accept");
           return false;
         }
         const data = await res.json();
@@ -293,6 +326,11 @@ function htmlEscape(str) {
         }
         await this.setBuffer(data.id, nick + "_input");
         this.saveAllToLocalStorage();
+        const res1 = await fetch("/api/sam/send", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sockId: data.id, data: JSON.stringify({pubkey: this.pubkey}) }),
+        });
         return data.id;
       },
   

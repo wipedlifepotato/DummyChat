@@ -212,10 +212,155 @@ router.post('/session-accept', async (req, res) => {
     if (!acceptResult) return res.status(500).json({ status: false, error: 'Error while accept' });
 
     const id = uuidv4();
-    samSockets.set(id, acceptResult.socket || acceptResult); 
+    samSockets.set(id, acceptResult.socket || acceptResult);
+    const socket = acceptResult.socket || acceptResult;
+
+    samSockets.set(id, socket);
+    buffers.set(id, '');
+
+    socket.on('data', (data) => {
+      const current = buffers.get(id) || '';
+      buffers.set(id, current + data.toString());
+      console.log(`Data received on socket ${id}: ${data.toString()}`);
+    });
+ 
     return res.json({ status: 'ok', id });
   } catch (e) {
     return res.status(500).json({ status: false, error: e.message || 'Accept failed' });
+  }
+});
+/**
+ * @swagger
+ * /sam/close-socket/{socketId}:
+ *   delete:
+ *     summary: Close a SAM socket by ID and delete its buffer
+ *     parameters:
+ *       - in: path
+ *         name: socketId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID of the socket to close
+ *     responses:
+ *       200:
+ *         description: Socket closed and buffer deleted successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                   example: ok
+ *                 message:
+ *                   type: string
+ *                   example: Socket {socketId} closed and buffer deleted
+ *       400:
+ *         description: Missing socketId parameter
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   example: socketId required
+ *       404:
+ *         description: Socket with given ID not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   example: Socket not found
+ */
+router.delete('/close-socket/:socketId', async (req, res) => {
+  const socketId = req.params.socketId;
+
+  if (!socketId) {
+    return res.status(400).json({ error: 'socketId required' });
+  }
+
+  const socket = samSockets.get(socketId);
+  if (!socket) {
+    return res.status(404).json({ error: 'Socket not found' });
+  }
+
+  if (typeof socket.destroy === 'function') {
+    socket.destroy();
+  } else if (typeof socket.close === 'function') {
+    socket.close();
+  }
+
+  samSockets.delete(socketId);
+
+  for (const [bufName, _] of buffers.entries()) {
+    if (bufName.includes(socketId)) {
+      buffers.delete(bufName);
+    }
+  }
+
+  res.json({ status: 'ok', message: `Socket ${socketId} closed and buffer deleted` });
+});
+/**
+ * @swagger
+ * /sam/sockets:
+ *   get:
+ *     summary: Get list of all active sockets with buffer info
+ *     responses:
+ *       200:
+ *         description: List of sockets with their buffer data length
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 sockets:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: string
+ *                       bufferLength:
+ *                         type: number
+ *                       bufferPreview:
+ *                         type: string
+ *                       friendPubKey:
+ *                         type: string
+ */
+router.get('/sockets', (req, res) => {
+  try {
+    const allSockets = [];
+
+    for (const [id, socket] of samSockets.entries()) {
+      const bufferData = buffers.get(id) || '';
+      let friendPubKey = '';
+
+      try {
+        const cleanStr = bufferData.trim();
+        const parsed = JSON.parse(cleanStr);
+        if (parsed && parsed.pubkey) {
+          friendPubKey = parsed.pubkey;
+          //buffers.set(id, '')
+        }
+      } catch {
+        // pass
+      }
+
+      allSockets.push({
+        id,
+        bufferLength: bufferData.length,
+        bufferPreview: bufferData.slice(0, 100),
+        friendPubKey
+      });
+    }
+
+    res.json({ sockets: allSockets });
+  } catch (e) {
+    res.status(500).json({ error: e.message || 'Failed to get sockets' });
   }
 });
 /**
@@ -289,6 +434,17 @@ router.post('/session-connect', async (req, res) => {
 
     const id = uuidv4();
     samSockets.set(id, connectSocket.socket || connectSocket);
+    const socket = connectSocket.socket || connectSocket;
+
+    samSockets.set(id, socket);
+    buffers.set(id, '');
+
+    socket.on('data', (data) => {
+      const current = buffers.get(id) || '';
+      buffers.set(id, current + data.toString());
+      console.log(`Data received on socket ${id}: ${data.toString()}`);
+    });
+
     return res.json({ status: 'ok', id });
   } catch (e) {
     return res.status(500).json({ status: false, error: e.message || 'Connect failed' });
@@ -478,15 +634,6 @@ router.get('/getBuffer/:bufName', async (req, res) => {
  *                 error:
  *                   type: string
  *                   example: Socket not found
- *       500:
- *         description: Internal server error or buffer already exists (if you want)
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 error:
- *                   type: string
  */
 
 router.post('/setBuffer', async (req, res) => {
