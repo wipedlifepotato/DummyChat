@@ -339,21 +339,16 @@ router.get('/sockets', (req, res) => {
       const bufferData = buffers.get(id) || '';
       let friendPubKey = '';
 
-      try {
-        const cleanStr = bufferData.split("\r\n")[0].trim();
-        const parsed = JSON.parse(cleanStr);
-        if (parsed && parsed.pubkey) {
-          friendPubKey = parsed.pubkey;
-          //buffers.set(id, '')
-        }
-      } catch {
-        // pass
+      const regex = /{[^{}]*"pubkey"\s*:\s*"([^"]+)"[^{}]*}/g;
+      const match = regex.exec(bufferData);
+      if (match) {
+        friendPubKey = match[1];
       }
 
       allSockets.push({
         id,
         bufferLength: bufferData.length,
-        bufferPreview: bufferData.slice(0, 100),
+        bufferPreview: bufferData.slice(0, 12000),
         friendPubKey
       });
     }

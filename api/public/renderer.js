@@ -252,24 +252,34 @@ function htmlEscape(str) {
   
       async sendMessage() {
         if (!this.selectedFriend) return alert("Выберите получателя");
-  
+      
         const messageText = document.getElementById("messageText");
-        const _data = messageText.value.trim();
-        if (!_data) return;
-  
+        const _text = messageText.value.trim();
+        if (!_text) return;
+      
         const receiver = this.selectedFriend;
         const socket = this.outputSockets[receiver] || this.acceptSockets[receiver];
         if (!socket) return alert("Socket not found for sending");
-  
+      
+        const messageObj = {
+          type: "message",
+          from: this.nickname || "Anonymous",
+          pubkey: this.pubkey || "unknown",
+          timestamp: Date.now(),
+          text: _text
+        };
+      
+        const payload = JSON.stringify(messageObj) + "\r\n";
+      
         const res = await fetch("/api/sam/send", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sockId: socket, data: "  "+_data + "\r\n" }),
+          body: JSON.stringify({ sockId: socket, data: payload }),
         });
-  
-        if (!res.ok) return alert("Error sending message");
-  
-        this.messages.push({ from: this.nickname, text: _data });
+      
+        if (!res.ok) return alert("Ошибка при отправке");
+      
+        this.messages.push({ from: this.nickname, text: _text });
         messageText.value = "";
         return true;
       },
@@ -280,21 +290,32 @@ function htmlEscape(str) {
           const data = await res.json();
       
           for (const sock of data.sockets) {
-            const fr = this.friends.filter(f => f.pubkey === sock.friendPubKey);
-            if (fr.length > 0) {
-              const friend = fr[0];
-              this.outputSockets[friend.name] = sock.id;
-              this.acceptSockets[friend.name] = sock.id;
-              this.saveAllToLocalStorage();
-            } else if(sock.id && sock.friendPubKey) {
-              this.addFriendInternal(sock.id, sock.friendPubKey)
+            const friend = this.friends.find(f => f.pubkey === sock.friendPubKey);
+            
+            if (friend) {
+              const friendName = friend.name;
+              const isNewer =
+                !this.lastSocketTimestamps ||
+                !this.lastSocketTimestamps[friendName] ||
+                this.lastSocketTimestamps[friendName] < sock.lastMessageTimestamp;
+      
+              if (isNewer) {
+                this.outputSockets[friendName] = sock.id;
+                this.acceptSockets[friendName] = sock.id;
+                if (!this.lastSocketTimestamps) this.lastSocketTimestamps = {};
+                this.lastSocketTimestamps[friendName] = sock.lastMessageTimestamp || Date.now();
+              }
+            } else if (sock.id && sock.bufferLength) {
+              this.addFriendInternal(sock.id, sock.friendPubKey); 
             }
           }
+      
+          this.saveAllToLocalStorage();
         } catch (e) {
           console.error("Error in getSockets:", e);
         }
-      },      
-      async sessionConnect(nick, dest) {
+        },    
+        async sessionConnect(nick, dest) {
         const res = await fetch("/api/sam/session-connect", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -407,13 +428,29 @@ function htmlEscape(str) {
         try {
           const res = await fetch(`/api/sam/getBuffer/${bufferName}`);
           if (!res.ok) return false;
-  
+      
           const json = await res.json();
-          return json.buffer || "";
-        } catch {
+          const rawBuffer = json.buffer || "";
+      
+          const messages = [];
+      
+          const regex = /{[^{}]*"type"\s*:\s*"message"[^{}]*}/g;
+          let match;
+          while ((match = regex.exec(rawBuffer)) !== null) {
+            try {
+              const obj = JSON.parse(match[0]);
+              if (obj && obj.text) messages.push(obj.text);
+            } catch (e) {
+              
+            }
+          }
+      
+          return messages.join("\r\n");
+        } catch (e) {
+          console.error("fetchBuffers error:", e);
           return "";
         }
-      },
-    },
+      }
+    } 
   }).use(i18n).mount("#app");
   
