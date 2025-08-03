@@ -15,5 +15,13 @@
 
 ---
 
+## Installation
+```bash
+   git clone https://github.com/yourname/DummyChat.git
+   cd DummyChat
+   npm install
+   npm run api
+```
+
 <img width="914" height="434" alt="изображение" src="https://github.com/user-attachments/assets/7e996912-e6db-40e6-97c6-ed362ced0778" />
 
