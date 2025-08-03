@@ -340,7 +340,7 @@ router.get('/sockets', (req, res) => {
       let friendPubKey = '';
 
       try {
-        const cleanStr = bufferData.trim();
+        const cleanStr = bufferData.split("\r\n")[0].trim();
         const parsed = JSON.parse(cleanStr);
         if (parsed && parsed.pubkey) {
           friendPubKey = parsed.pubkey;

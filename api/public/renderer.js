@@ -224,18 +224,20 @@ function htmlEscape(str) {
   
         return true;
       },
-  
-      async addFriend() {
-       const friendName = document.getElementById("friendName").value.trim();
-        const friendPubKey = document.getElementById("friendPubKey").value.trim();
+      async addFriendInternal(friendName, friendPubKey) {
         if (!friendName || !friendPubKey) {
           return alert("Введите имя и pubkey друга");
         }
         if (!this.privkey) await this.genKeys();
-
+    
         this.friends.push({ name: friendName, pubkey: friendPubKey });
         this.saveAllToLocalStorage();
         console.log(`friend added successfully: ${friendName}`);
+      },
+      async addFriend() {
+        const friendName = document.getElementById("friendName").value.trim();
+        const friendPubKey = document.getElementById("friendPubKey").value.trim();
+        await this.addFriendInternal(friendName, friendPubKey)
         location.reload();
       },
   
@@ -284,6 +286,8 @@ function htmlEscape(str) {
               this.outputSockets[friend.name] = sock.id;
               this.acceptSockets[friend.name] = sock.id;
               this.saveAllToLocalStorage();
+            } else if(sock.id && sock.friendPubKey) {
+              this.addFriendInternal(sock.id, sock.friendPubKey)
             }
           }
         } catch (e) {
