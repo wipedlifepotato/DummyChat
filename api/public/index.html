@@ -44,6 +44,10 @@
     .friend:hover {
       background-color: #f1f1f1;
     }
+    .selected-friend {
+      background-color: #d0ebff;
+      font-weight: bold;
+    }
   </style>
 </head>
 <body>
@@ -57,14 +61,15 @@
         <!-- Friends -->
         <div class="col-md-3 sidebar">
           <h5>{{ $t('friends') }}</h5>
-          <button @click="mainInputStreamSet">{{ $t('mainStream') }}</button>
-          <div v-for="friend in friends" class="friend" @click="selectFriend(friend.name, friend.pubkey)">
+          <div v-for="friend in friends" :class="{ 'selected-friend': friend.name === selectedFriend }" @click="selectFriend(friend.name, friend.pubkey)">
+            <span v-if="friend.direction === 'in'">←</span>
+            <span v-else-if="friend.direction === 'out'">→</span>
             {{ friend.name }} <button @click="delFriend(friend.name)">{{ $t('del') }}</button>
           </div>
           <hr/>
           <h6>{{ $t('addFriend') }}</h6>
-          <label for="friendName">{{ $t('friendName') }}:</label><input id="friendName"/> <br/>
-          <label for="friendPubKey">{{ $t('friendPubKey') }}:</label><input id="friendPubKey"/><br/>
+          <label for="friendName">{{ $t('friendName') }}:</label><input id="friendName" v-model="newFriendName"/><br/>
+          <label for="friendPubKey">{{ $t('friendPubKey') }}:</label><input id="friendPubKey" v-model="newFriendPubkey"/><br/>
           <button @click="addFriend">{{ $t('addFriend') }}</button>
         </div>
 

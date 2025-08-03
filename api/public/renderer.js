@@ -16,7 +16,6 @@ function htmlEscape(str) {
       send: 'Send',
       selectFriend: 'Select a friend',
       friends: 'Friends',
-      mainStream: 'main stream',
       del: 'delete',
       addFriend: 'Add friend',
       friendName: 'Nickname of friend',
@@ -34,7 +33,6 @@ function htmlEscape(str) {
       send: 'Отправить',
       selectFriend: 'Выберите друга',
       friends: 'Друзья',
-      mainStream: 'Главный стрим',
       del: 'удалить',
       addFriend: 'Добавить друга',
       friendName: 'Никнейм друга',
@@ -59,6 +57,8 @@ function htmlEscape(str) {
       return {
         title: "DummyChat UI",
         buffer: "",
+        newFriendName: '',
+        newFriendPubkey: '',
         pubkey: localStorage.getItem("pubkey"),
         privkey: localStorage.getItem("privkey") || "",
         message: "",
@@ -91,6 +91,7 @@ function htmlEscape(str) {
       changeLocale() {
             this.$i18n.locale = this.locale;
             document.title = this.$t('title');
+            this.emit()
       },
       async restoreSessionsAndSockets() {
         for (const friend of this.friends) {
@@ -125,7 +126,12 @@ function htmlEscape(str) {
           this.selectFriend(this.friends[0].name, this.friends[0].pubkey);
         }
       },
-  
+      setFriendDirection(name, dir) {
+        const friend = this.friends.find(f => f.name === name);
+        if (friend) {
+          friend.direction = dir;
+        }
+      },
       saveAllToLocalStorage() {
         localStorage.setItem("sessions", JSON.stringify(this.sessions));
         localStorage.setItem("acceptSockets", JSON.stringify(this.acceptSockets));
@@ -148,7 +154,7 @@ function htmlEscape(str) {
             alert("Can't reach friend");
             return false;
           }
-          this.outputSockets[friendName] = socket;
+          if(!this.outputSockets[friendName]) this.outputSockets[friendName] = socket;
           await this.setBuffer(socket, friendName + "_output");
         }
   
@@ -206,20 +212,7 @@ function htmlEscape(str) {
           return alert("Введите имя и pubkey друга");
         }
         if (!this.privkey) await this.genKeys();
-        /*
-        const sessionId = await this.createSession(friendName, this.privkey);
-        if (!sessionId) alert("Err to add (createSession)");
-  
-        const sockId = await this.sessionConnect(friendName, friendPubKey);
-        if (!sockId) alert("Err to connect");
-  
-        if(sessionId) this.sessions[friendName] = sessionId;
-        if(sockId) this.outputSockets[friendName] = sockId;
-        this.acceptSockets[friendName] = await this.sessionAccept(friendName);
-  
-        await this.setBuffer(sockId, friendName + "_output");
-        await this.setBuffer(this.acceptSockets[friendName], friendName + "_input");*/
-        //this.selectFriend(thisfriendName, this.friends[0].pubkey);
+
         this.friends.push({ name: friendName, pubkey: friendPubKey });
         this.saveAllToLocalStorage();
         console.log(`friend added successfully: ${friendName}`);
@@ -256,6 +249,10 @@ function htmlEscape(str) {
   
         this.messages.push({ from: this.nickname, text: _data });
         messageText.value = "";
+        this.$nextTick(() => {
+          const chat = document.getElementById('chatHistory');
+          chat.scrollTop = chat.scrollHeight;
+        });
         return true;
       },
   
@@ -270,7 +267,10 @@ function htmlEscape(str) {
           return false;
         }
         const data = await res.json();
-        this.outputSockets[nick] = data.id;
+        if(!this.outputSockets[nick]) {
+           this.outputSockets[nick] = data.id;
+           this.setFriendDirection(nick, 'out');
+        }
         await this.setBuffer(data.id, nick + "_output");
         this.saveAllToLocalStorage();
         return data.id;
@@ -287,7 +287,10 @@ function htmlEscape(str) {
           return false;
         }
         const data = await res.json();
-        this.acceptSockets[nick] = data.id;
+        if(!this.acceptSockets[nick]){ 
+          this.acceptSockets[nick] = data.id;
+          this.setFriendDirection(nick, 'in');
+        }
         await this.setBuffer(data.id, nick + "_input");
         this.saveAllToLocalStorage();
         return data.id;
