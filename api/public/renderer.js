@@ -108,19 +108,25 @@ function htmlEscape(str) {
           
   
           if (!this.acceptSockets[friendName]) {
-            const acceptId = await this.sessionAccept(friendName);
-            if (acceptId) {
-              this.acceptSockets[friendName] = acceptId;
-              await this.setBuffer(acceptId, friendName + "_input");
-            }
+            this.sessionAccept(friendName).then(acceptId => {
+              if (acceptId) {
+                this.acceptSockets[friendName] = acceptId;
+                this.setBuffer(acceptId, friendName + "_input").then(() => {
+                  // pass
+                });
+              }
+            });
           }
-  
+          
           if (!this.outputSockets[friendName]) {
-            const connectId = await this.sessionConnect(friendName, friendPubKey);
-            if (connectId) {
-              this.outputSockets[friendName] = connectId;
-              await this.setBuffer(connectId, friendName + "_output");
-            }
+            this.sessionConnect(friendName, friendPubKey).then(connectId => {
+              if (connectId) {
+                this.outputSockets[friendName] = connectId;
+                this.setBuffer(connectId, friendName + "_output").then(() => {
+                  // pass
+                });
+              }
+            });
           }
         }
   
